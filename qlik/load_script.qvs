@@ -1,0 +1,208 @@
+// ============================================================================
+// RHC Training Analytics - Qlik Sense Load Script
+// Layer: Gold
+//
+// Antes de executar:
+// 1. Disponibilize os arquivos Parquet da Gold no Qlik Sense.
+// 2. Crie uma conexão de arquivos chamada RHC_Training_Gold.
+// 3. Garanta que a conexão aponte para a pasta que contém os 9 Parquets Gold.
+//
+// Objetivo desta primeira versão:
+// - carregar a camada Gold;
+// - manter nomes de tabelas claros;
+// - evitar associações acidentais por campos descritivos;
+// - preparar o modelo para evolução para Link Table / Canonical Calendar.
+// ============================================================================
+
+SET ThousandSep='.';
+SET DecimalSep=',';
+SET MoneyThousandSep='.';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='R$ #.##0,00;-R$ #.##0,00';
+SET DateFormat='DD/MM/YYYY';
+SET TimestampFormat='DD/MM/YYYY hh:mm:ss';
+SET FirstWeekDay=0;
+SET BrokenWeeks=1;
+SET ReferenceDay=4;
+SET FirstMonthOfYear=1;
+SET CollationLocale='pt-BR';
+
+// ---------------------------------------------------------------------------
+// DIMENSÕES
+// ---------------------------------------------------------------------------
+
+DimDate:
+LOAD
+    date_key                                   as %DateKey,
+    Date(date)                                as Date,
+    year                                      as Year,
+    quarter                                   as Quarter,
+    month                                     as MonthNumber,
+    month_name                                as MonthName,
+    year_month                                as YearMonth,
+    week                                      as Week,
+    day                                       as Day,
+    weekday                                   as Weekday,
+    is_weekend                                as IsWeekend
+FROM [lib://RHC_Training_Gold/dim_date.parquet]
+(parquet);
+
+DimProfile:
+LOAD
+    profile_id                                as %ProfileKey,
+    name                                      as ProfileName,
+    birth_date                                as BirthDate,
+    gender                                    as Gender,
+    goal                                      as Goal,
+    is_active                                 as ProfileIsActive,
+    created_at                                as ProfileCreatedAt
+FROM [lib://RHC_Training_Gold/dim_profile.parquet]
+(parquet);
+
+DimExercise:
+LOAD
+    exercise_id                               as %ExerciseKey,
+    code                                      as ExerciseCode,
+    name                                      as ExerciseName,
+    primary_muscle_group_id                   as PrimaryMuscleGroupId,
+    movement_pattern_id                       as MovementPatternId,
+    exercise_category_id                      as ExerciseCategoryId,
+    is_active                                 as ExerciseIsActive
+FROM [lib://RHC_Training_Gold/dim_exercise.parquet]
+(parquet);
+
+DimProgram:
+LOAD
+    program_id                                as %ProgramKey,
+    slug                                      as ProgramSlug,
+    name                                      as ProgramName,
+    objective                                 as ProgramObjective,
+    duration_weeks                            as ProgramDurationWeeks,
+    status                                    as ProgramStatus,
+    description                               as ProgramDescription
+FROM [lib://RHC_Training_Gold/dim_program.parquet]
+(parquet);
+
+// ---------------------------------------------------------------------------
+// FATOS
+//
+// Nesta versão cada fato recebe nomes de chaves específicos. Isso impede que
+// o Qlik forme synthetic keys automaticamente entre várias fatos.
+// Na próxima evolução, uma Link Table poderá unificar Profile/Date/Exercise/
+// Program para análises cruzadas entre múltiplas fatos.
+// ---------------------------------------------------------------------------
+
+FactWorkoutSession:
+LOAD
+    workout_session_id                        as WorkoutSessionId,
+    profile_id                                as WS_ProfileKey,
+    date_key                                  as WS_DateKey,
+    workout_code                              as WorkoutCode,
+    Date(workout_date)                        as WorkoutDate,
+    gym_name                                  as GymName,
+    duration_minutes                          as DurationMinutes,
+    completion_percentage                     as CompletionPercentage,
+    total_volume                              as SessionTotalVolume,
+    distance_meters                           as DistanceMeters,
+    duration_seconds                          as DurationSeconds,
+    average_pace_seconds_per_km               as AveragePaceSecondsPerKm,
+    activity_mode                             as ActivityMode,
+    started_at                                as StartedAt,
+    completed_at                              as CompletedAt,
+    source_system                             as SourceSystem,
+    session_count                             as SessionCount
+FROM [lib://RHC_Training_Gold/fact_workout_session.parquet]
+(parquet);
+
+FactWorkoutExercise:
+LOAD
+    workout_exercise_id                       as WorkoutExerciseId,
+    workout_session_id                        as WE_WorkoutSessionId,
+    profile_id                                as WE_ProfileKey,
+    date_key                                  as WE_DateKey,
+    exercise_id                               as WE_ExerciseKey,
+    Date(workout_date)                        as WE_WorkoutDate,
+    sort_order                                as ExerciseSortOrder,
+    exercise_name_snapshot                    as ExerciseNameSnapshot,
+    muscle_group_snapshot                     as MuscleGroupSnapshot,
+    movement_pattern_snapshot                 as MovementPatternSnapshot,
+    prescribed_sets                           as PrescribedSets,
+    prescribed_reps                           as PrescribedReps,
+    actual_reps                               as ActualReps,
+    weight                                    as ExerciseWeight,
+    completed                                 as ExerciseCompleted,
+    notes                                     as ExerciseNotes,
+    exercise_row_count                        as ExerciseRowCount
+FROM [lib://RHC_Training_Gold/fact_workout_exercise.parquet]
+(parquet);
+
+FactBodyMeasurement:
+LOAD
+    measurement_id                            as MeasurementId,
+    profile_id                                as BM_ProfileKey,
+    date_key                                  as BM_DateKey,
+    Date(measured_on)                         as MeasuredOn,
+    weight                                    as BodyWeight,
+    waist                                     as Waist,
+    chest                                     as Chest,
+    arm                                       as Arm,
+    thigh                                     as Thigh,
+    hip                                       as Hip,
+    notes                                     as MeasurementNotes,
+    measurement_count                         as MeasurementCount
+FROM [lib://RHC_Training_Gold/fact_body_measurement.parquet]
+(parquet);
+
+FactProgramExposure:
+LOAD
+    exposure_id                               as ExposureId,
+    profile_id                                as PE_ProfileKey,
+    program_id                                as PE_ProgramKey,
+    program_exercise_id                       as ProgramExerciseId,
+    workout_session_id                        as PE_WorkoutSessionId,
+    variation_exercise_id                     as PE_ExerciseKey,
+    date_key                                  as PE_DateKey,
+    Date(workout_date)                        as PE_WorkoutDate,
+    enrollment_id                             as EnrollmentId,
+    variation_name_snapshot                   as VariationNameSnapshot,
+    load                                      as ExposureLoad,
+    reps                                      as RepsJson,
+    completed_sets                            as CompletedSets,
+    observed_rpe                              as ObservedRPE,
+    progression_action                        as ProgressionAction,
+    suggested_load                            as SuggestedLoad,
+    suggestion_reason                         as SuggestionReason,
+    accepted_action                           as AcceptedAction,
+    created_at                                as ExposureCreatedAt,
+    exposure_count                            as ExposureCount
+FROM [lib://RHC_Training_Gold/fact_program_exposure.parquet]
+(parquet);
+
+FactExerciseSet:
+LOAD
+    exposure_id                               as ES_ExposureId,
+    profile_id                                as ES_ProfileKey,
+    program_id                                as ES_ProgramKey,
+    program_exercise_id                       as ES_ProgramExerciseId,
+    workout_session_id                        as ES_WorkoutSessionId,
+    variation_exercise_id                     as ES_ExerciseKey,
+    date_key                                  as ES_DateKey,
+    Date(workout_date)                        as ES_WorkoutDate,
+    set_number                                as SetNumber,
+    reps                                      as Reps,
+    load                                      as Load,
+    observed_rpe                              as SetObservedRPE,
+    set_volume                                as SetVolume,
+    set_count                                 as SetCount
+FROM [lib://RHC_Training_Gold/fact_exercise_set.parquet]
+(parquet);
+
+// ---------------------------------------------------------------------------
+// NOTA DE MODELAGEM
+// ---------------------------------------------------------------------------
+// As dimensões foram carregadas com chaves %*, enquanto as fatos possuem
+// chaves prefixadas por fato. Isso deixa o primeiro reload previsível e sem
+// synthetic keys. O próximo passo do projeto é construir uma Link Table para
+// conectar as múltiplas fatos às dimensões compartilhadas, permitindo filtros
+// canônicos de Data, Perfil, Exercício e Programa em todo o dashboard.
+// ============================================================================
