@@ -1,108 +1,100 @@
 # RHC Training Analytics
 
-Projeto de dados criado a partir do **RHC Training**, uma aplicação de treino desenvolvida e utilizada por mim no dia a dia.
+> **Do aplicativo ao dashboard:** dados gerados pelo uso real do RHC Training, tratados em uma arquitetura Bronze → Silver → Gold e analisados no Power BI.
 
-O objetivo deste repositório é documentar o caminho completo dos dados: da aplicação que gera os registros de treino até o tratamento, modelagem analítica e visualização no Power BI.
+O **RHC Training Analytics** nasceu de uma pergunta simples: em vez de utilizar um dataset pronto para montar um dashboard, por que não analisar os dados gerados por uma aplicação que eu mesmo desenvolvi e utilizo?
+
+O resultado é um projeto end-to-end que conecta **produto, geração de dados, armazenamento, engenharia de dados, modelagem analítica e visualização**.
 
 ## Dashboard público
 
-O dashboard atual pode ser acessado no Power BI:
-
+**Power BI:**  
 https://app.powerbi.com/view?r=eyJrIjoiNzcwYTIzZTktNzY5Ni00ZTM1LWFkNTEtZWRkODRmYWM0MzczIiwidCI6IjUzM2FlNjZjLTI1NjktNGNjNS04YTZkLThiMDdhOWFlNzBlMyJ9
 
-## Fluxo do projeto
+## Arquitetura
 
 ```text
 RHC Training
-     |
-     v
+     │
+     ▼
   Supabase
-     |
-     v
+     │
+     ▼
    Bronze
-     |
-     v
+     │
+     ▼
    Silver
-     |
-     v
+     │
+     ▼
     Gold
-     |
-     v
- Power BI
+     │
+     ▼
+   Parquet
+     │
+     ▼
+  Power BI
 ```
 
-### RHC Training
+### 1. Origem — RHC Training
 
-O RHC Training é a aplicação que origina os dados utilizados neste projeto. Ela registra informações reais dos meus próprios treinos, como sessões realizadas, exercícios, séries, repetições, cargas, volume e RPE.
+O RHC Training é a aplicação que gera os dados utilizados neste projeto. Ela registra informações reais dos meus próprios treinos, incluindo sessões, exercícios, séries, repetições, cargas, volume e percepção de esforço (RPE).
 
-A aplicação continua em uso, portanto o conjunto de dados evolui conforme novos treinos são registrados.
+A aplicação continua em uso. Por isso, o banco operacional continua recebendo novos registros mesmo quando o snapshot analítico ainda não foi reprocessado.
 
-### Bronze
+### 2. Bronze — ingestão
 
-Camada de ingestão dos dados de origem, preservando os registros com o mínimo de transformação.
+A camada Bronze preserva os dados extraídos da origem com o mínimo de transformação, mantendo uma base rastreável para as etapas seguintes.
 
-### Silver
+### 3. Silver — tratamento e qualidade
 
-Camada destinada à limpeza, padronização, validação de relacionamentos e preparação dos dados.
+A Silver organiza, tipa e valida os dados antes da modelagem analítica. Entre as verificações realizadas estão:
 
-Entre as verificações realizadas estão:
+- consistência de chaves;
+- disponibilidade das colunas de relacionamento;
+- registros órfãos;
+- tratamento de estruturas JSON;
+- padronização necessária para consumo analítico.
 
-- consistência das chaves;
-- relacionamentos entre tabelas;
-- identificação de registros órfãos;
-- tratamento e padronização das estruturas necessárias para análise.
+### 4. Gold — modelo analítico
 
-### Gold
+A Gold transforma os dados tratados em fatos e dimensões adequados para análise.
 
-Camada analítica construída a partir das tabelas tratadas.
+Principais entidades analíticas:
 
-O modelo separa dimensões e fatos para facilitar o consumo pelas ferramentas de BI, incluindo informações de:
-
-- datas;
-- perfil;
-- exercícios;
-- programas de treino;
-- sessões;
+- dimensões de data, exercício, perfil e programa;
+- fatos de sessões de treino;
 - execuções de exercícios;
 - séries;
-- progressão e exposição ao programa;
+- exposição ao programa;
 - medidas corporais.
+
+Os datasets Gold são persistidos em **Parquet** para consumo no Power BI.
+
+## Uma decisão de modelagem
+
+O catálogo possui exercícios que ainda não foram executados. Em vez de excluir esses registros da dimensão de exercícios, o modelo preserva o catálogo completo e adiciona indicadores de utilização.
+
+Isso permite distinguir **“exercício existente no catálogo”** de **“exercício já realizado”** sem perder informação de referência.
 
 ## Power BI
 
-O relatório foi construído sobre os arquivos Parquet da camada Gold.
-
-Atualmente possui duas páginas principais:
+O relatório possui duas visões principais.
 
 ### Visão Geral de Treinos
 
-Apresenta indicadores como:
-
-- sessões realizadas;
-- execuções de exercícios;
-- séries executadas;
-- volume total;
-- duração média;
-- evolução do volume;
-- frequência semanal;
-- volume por treino;
-- exercícios com maior volume.
+Apresenta sessões realizadas, execuções, séries, volume total, duração média, evolução do volume, frequência semanal, volume por treino e exercícios com maior volume.
 
 ### Progressão por Exercício
 
-Permite selecionar um exercício e acompanhar:
+Permite selecionar um exercício e acompanhar carga máxima, sessões, séries, repetições, volume, progressão de carga, evolução de volume, RPE e histórico por data.
 
-- carga máxima;
-- número de sessões;
-- séries;
-- repetições;
-- volume;
-- evolução da carga;
-- evolução do volume;
-- RPE ao longo do tempo;
-- histórico por data.
+## Snapshot atual
 
-## Tecnologias utilizadas
+O dashboard publicado representa um **snapshot processado** da base. Como o RHC Training continua sendo utilizado, a aplicação pode apresentar registros mais recentes que ainda não chegaram ao Power BI.
+
+Isso é intencionalmente visível nesta primeira versão e conecta diretamente ao próximo desafio do projeto: automatizar a atualização do pipeline.
+
+## Tecnologias
 
 - RHC Training
 - Supabase / PostgreSQL
@@ -113,22 +105,32 @@ Permite selecionar um exercício e acompanhar:
 - Power BI
 - Git / GitHub
 
-## Sobre os dados
+## Privacidade dos dados
 
-Os dados utilizados são provenientes do uso real do RHC Training. Os arquivos brutos e dados pessoais não são publicados neste repositório.
+Os dados são provenientes do uso real do RHC Training. Arquivos brutos e informações pessoais não são publicados neste repositório.
 
-O foco do repositório é demonstrar a arquitetura, as transformações, a modelagem e o resultado analítico.
+O objetivo é demonstrar arquitetura, tratamento, modelagem, validação e resultado analítico.
 
 ## Uso de IA
 
-Ferramentas de IA foram utilizadas como apoio durante o desenvolvimento, principalmente para discussão de alternativas, revisão de código, investigação de problemas e apoio na documentação.
+IA foi utilizada como ferramenta de apoio ao desenvolvimento: discussão de alternativas, revisão de código, investigação de problemas, apoio em DAX e documentação.
 
-As decisões de implementação, testes, validações, ajustes do modelo e uso da aplicação fizeram parte do processo de desenvolvimento do projeto.
+As respostas não foram tratadas como resultado final automaticamente. Soluções foram testadas contra os dados, revisadas e, quando necessário, corrigidas. As decisões de arquitetura, regras, validações e implementação permaneceram parte do processo de desenvolvimento.
 
-## Próximos passos
+## Próxima etapa
 
-O próximo objetivo é reduzir o processo manual entre a aplicação e o BI, automatizando o pipeline para permitir atualizações recorrentes e, posteriormente, uma experiência de dados mais próxima do tempo real.
+A versão atual ainda possui etapas manuais entre a origem e o dashboard.
+
+O próximo objetivo é evoluir para:
+
+```text
+RHC Training → Supabase → pipeline automatizado → Bronze/Silver/Gold → atualização do Power BI
+```
+
+A meta é reduzir intervenção manual e permitir atualizações recorrentes, sem apresentar a arquitetura atual como tempo real antes que ela efetivamente seja.
 
 ---
 
-Projeto desenvolvido como estudo prático de engenharia e análise de dados utilizando dados gerados por uma aplicação própria.
+**Foram muitos treinos até chegar nesse dashboard. 😅**
+
+Projeto desenvolvido como estudo prático de engenharia e análise de dados a partir de dados gerados por uma aplicação própria.
